@@ -7,5 +7,3 @@ data/
 models/
 runs/
 *.pt
-tensorboard_demo/
-notebooks/tensorboard_demo/
