@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
+data/
+models/
+runs/
+*.pt
+tensorboard_demo/
+notebooks/tensorboard_demo/

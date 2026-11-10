@@ -1,0 +1,36 @@
+[project]
+name = "P2"
+version = "0.1.0"
+description = "P2 project"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "matplotlib>=3.8",
+    "seaborn>=0.13",
+    "scikit-learn>=1.5",
+    "torch>=2.0",
+    "torchvision>=0.15",
+    "tensorboard>=2.14",
+    "streamlit>=1.65.0",
+    "joblib>=1.6.0",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
+    "jupyterlab>=4.6.4",
+    "nbclient>=0.11.0",
+    "nbformat>=5.11.1",
+    "pytest>=9.1.1",
+]
+
+[project.optional-dependencies]
+yolo = [
+    "ultralytics>=8.0",
+    "opencv-python>=4.8",
+]
+video = [
+    "av>=12.0",
+]
