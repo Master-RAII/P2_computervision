@@ -1,20 +1,18 @@
 # P2 — Machine Learning and Deep Learning Course Notes
 
 The notebooks for P2 of the MSc Responsible AI Innovation: neural networks, training and evaluation, and
-computer vision. P2 continues where P1 (univariate analysis through `MLPClassifier`) stops — notebook `01`
+computer vision. P2 continues where P1 (multivariate analysis through `MLPClassifier`) stops — notebook `01`
 opens by explaining what happened inside the `.fit()` call at the end of P1's last notebook.
 
 | Week | Lesson 1 | Lesson 2 |
 |---|---|---|
-| 1 | `01` Neural Network Foundations — inside `.fit()`; `00` is homework before it | `02` PyTorch Foundations — tensors, datasets, the training loop |
-| 2 | `03` Convolutional Neural Networks — convolution, pooling, a first CNN | `04` Auditing an Image Dataset — chapter 1 of the image assignment; `sohas_classification.zip` downloaded before the lesson, sections 12 and 13 at home |
-| 3 | `05` Evaluation Metrics — precision, recall, thresholds; `06` Class Imbalance as self-study | `07` Training & Learning Curves — learning rate, epochs, curves |
-| 4 | `08` Regularization — weight decay, dropout | `09` Data Augmentation — more from the same images |
-| 5 | `10` Hyperparameter Tuning — splits, search, cross-validation | `11` Transfer Learning — pretrained ResNet50; **part A: classification** |
-| 6 | `12` Annotations & Metrics — boxes, IoU | `13` Object Detection — the detector interface, NMS, thresholds; **part B: YOLO** |
-
-Lessons are about 2 hours each, two per week. Weeks 8 and 9 have no lessons: they are for the two final assignments, both handed in at the end of week 9.
-
+| 1 | Neural Network Foundations |  PyTorch Foundations |
+| 2 |  Convolutional Neural Networks  | Auditing an Image Dataset |
+| 3 | Evaluation Metrics, Class Imbalance as self-study | Training & Learning Curves |
+| 4 | Regularization | Data Augmentation  |
+| 5 | Hyperparameter Tuning | Transfer Learning |
+| 6 | Formative feedback, work on assignments, questions |Formative feedback, work on assignments, questions|
+| 7 | Annotations & Metrics | Object Detection |
 
 
 ## Data
