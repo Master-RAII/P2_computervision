@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Convolutie stap voor stap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* plan: één werkbank. Bovenaan de knoppen, daaronder invoer → rekensom → uitvoer, onderaan het effect op de hele foto */
+  --bg:#F3F4F7; --panel:#FFFFFF; --ink:#16213A; --muted:#5D6578; --line:#D9DDE6;
+  --accent:#E5482D;   /* het filtervenster */
+  --out:#2357C9;      /* de uitvoercel */
+  --pad:#EEF0F5;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1420; --panel:#171E2D; --ink:#E6EAF3; --muted:#9AA3B8; --line:#2A3347;
+    --accent:#FF6A4D; --out:#6E9BFF; --pad:#202838; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1420; --panel:#171E2D; --ink:#E6EAF3; --muted:#9AA3B8; --line:#2A3347;
+  --accent:#FF6A4D; --out:#6E9BFF; --pad:#202838; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.45}
+main{max-width:1320px;margin:0 auto;padding:20px 20px 40px;display:grid;gap:16px}
+h1{font-size:26px;margin:0;text-wrap:balance;letter-spacing:-.01em}
+h2{font-size:16px;margin:0 0 10px;text-wrap:balance}
+p{margin:0}
+.lead{color:var(--muted);max-width:75ch}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.controls{display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:start}
+@media (max-width:860px){.controls{grid-template-columns:1fr}}
+.kernel-wrap{display:grid;gap:8px}
+.kernel{display:grid;grid-template-columns:repeat(3,64px);gap:4px}
+.kernel input{width:64px;height:44px;text-align:center;font-family:var(--font-mono);font-size:16px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.kernel input:focus,select:focus,button:focus-visible,input:focus-visible{outline:2px solid var(--out);outline-offset:1px}
+.row{display:flex;flex-wrap:wrap;gap:14px 18px;align-items:end}
+label{display:grid;gap:4px;font-size:13px;color:var(--muted);font-weight:500}
+select,.factor{height:36px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font:inherit;padding:0 8px}
+.factor{width:90px;font-family:var(--font-mono)}
+.buttons{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button{height:38px;padding:0 14px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;font-weight:600;cursor:pointer}
+button:hover{border-color:var(--ink)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary:hover{filter:brightness(1.05)}
+.speed{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.facts{font-family:var(--font-mono);font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 16px}
+.facts b{color:var(--ink);font-weight:600}
+.work{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,380px) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1100px){.work{grid-template-columns:1fr 1fr}.calc{grid-column:1 / -1;order:3}}
+@media (max-width:640px){.work{grid-template-columns:1fr}}
+.canvas-box{display:grid;gap:8px}
+.canvas-box canvas{width:100%;height:auto;image-rendering:pixelated;border-radius:4px;cursor:crosshair;display:block}
+.cap{font-size:13px;color:var(--muted)}
+.cap .mono{font-family:var(--font-mono);color:var(--ink)}
+.calc{display:grid;gap:12px}
+.mats{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.mat{display:grid;grid-template-columns:repeat(3,44px);gap:2px}
+.mat div{height:34px;display:grid;place-items:center;font-family:var(--font-mono);font-size:12.5px;border-radius:3px;font-variant-numeric:tabular-nums}
+.mat .padcell{background:var(--pad);color:var(--muted);font-style:italic}
+.mat.kern div{background:color-mix(in srgb,var(--accent) 12%,var(--panel));color:var(--ink)}
+.mat.prod div{background:var(--bg);color:var(--ink)}
+.op{font-size:20px;color:var(--muted);padding:0 2px}
+.mat-title{font-size:12px;color:var(--muted);margin-bottom:4px}
+.sum{font-family:var(--font-mono);font-size:13px;line-height:1.6;background:var(--bg);border-radius:6px;padding:10px 12px;overflow-x:auto;white-space:nowrap}
+.result{display:flex;align-items:center;gap:12px}
+.swatch{width:46px;height:46px;border-radius:6px;border:2px solid var(--out)}
+.big{font-family:var(--font-mono);font-size:22px;font-weight:600}
+.note{font-size:13px;color:var(--muted)}
+.crop{display:grid;grid-template-columns:auto 1fr;gap:10px 14px;align-items:start}
+.crop canvas{width:100%;max-width:220px;height:auto;border-radius:4px;cursor:crosshair;touch-action:none;display:block}
+@media (max-width:420px){.crop{grid-template-columns:1fr}}
+.photo{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:640px){.photo{grid-template-columns:1fr}}
+.photo canvas{width:100%;height:auto;border-radius:6px;display:block}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--out) 14%,var(--panel));color:var(--out)}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main>
+  <header style="display:grid;gap:6px">
+    <h1>Convolutie stap voor stap</h1>
+    <p class="lead">Een filter van 3 × 3 schuift over de foto. Op elke plek vermenigvuldig je de 9 pixelwaarden met de 9 gewichten van het filter en tel je ze op: dat ene getal wordt één pixel van de uitvoer. Kies een filter of vul zelf gewichten in, en loop er stap voor stap doorheen.</p>
+  </header>
+
+  <section class="panel controls" aria-label="Instellingen">
+    <div class="kernel-wrap">
+      <label for="preset">Standaardfilter</label>
+      <select id="preset"></select>
+      <div class="cap">Gewichten van het filter (zelf aan te passen)</div>
+      <div class="kernel" id="kernel"></div>
+      <label for="factor">Factor (alles × …)
+        <input id="factor" class="factor" value="1" inputmode="decimal" aria-describedby="factorhelp">
+      </label>
+      <span id="factorhelp" class="cap">Bijvoorbeeld 1/9 of 0.5</span>
+    </div>
+    <div style="display:grid;gap:16px">
+      <div class="row">
+        <label for="padding">Padding (nullen rondom)
+          <select id="padding"><option value="0">0</option><option value="1" selected>1</option><option value="2">2</option></select>
+        </label>
+        <label for="stride">Stride (stapgrootte)
+          <select id="stride"><option value="1" selected>1</option><option value="2">2</option></select>
+        </label>
+        <label for="grid">Raster (pixels)
+          <select id="grid"><option value="16">16 × 12 (met getallen)</option><option value="24" selected>24 × 18</option><option value="32">32 × 24</option><option value="48">48 × 36</option></select>
+        </label>
+        <label for="channel">Kanaal
+          <select id="channel"><option value="gray" selected>grijswaarden</option><option value="r">rood</option><option value="g">groen</option><option value="b">blauw</option></select>
+        </label>
+        <label for="display">Uitvoer tonen als
+          <select id="display"><option value="clip">afkappen op 0–255</option><option value="abs">absolute waarde</option><option value="norm">schalen (min → zwart, max → wit)</option></select>
+        </label>
+      </div>
+      <div class="buttons">
+        <button id="back" type="button" aria-label="Een stap terug">◀ Terug</button>
+        <button id="step" type="button" class="primary">Volgende stap ▶</button>
+        <button id="play" type="button">Afspelen</button>
+        <button id="all" type="button">Alles in één keer</button>
+        <button id="reset" type="button">Opnieuw</button>
+        <span class="speed"><label for="speed" style="display:inline">Snelheid</label><input id="speed" type="range" min="1" max="60" value="8"><span id="speedval">8 / s</span></span>
+      </div>
+      <div class="facts" id="facts"></div>
+    </div>
+  </section>
+
+  <section class="work">
+    <div class="panel canvas-box">
+      <h2>Invoer <span class="pill" id="inshape"></span></h2>
+      <div class="crop">
+        <canvas id="thumb" width="440" height="330" aria-label="Hele foto met het gekozen stuk; sleep om een ander stuk te kiezen"></canvas>
+        <div style="display:grid;gap:6px">
+          <label for="crop">Uitsnede
+            <select id="crop">
+              <option value="full">hele foto</option>
+              <option value="slice" selected>bord en taartpunt</option>
+              <option value="clasp">rand van de vorm met sluiting</option>
+              <option value="lattice">deegrooster</option>
+              <option value="own">zelf gekozen</option>
+            </select>
+          </label>
+          <span class="cap">Sleep op de foto om zelf een stuk te kiezen. Sleep binnen het kader om het te verschuiven.</span>
+        </div>
+      </div>
+      <canvas id="cin" width="400" height="300" aria-label="Invoerraster met het filtervenster"></canvas>
+      <p class="cap">Het rode vak is het filter. Grijze vakjes met een schuine streep zijn padding: nullen die je toevoegt. Klik ergens om het filter daarheen te zetten.</p>
+    </div>
+    <div class="panel calc" aria-live="polite">
+      <h2>Wat er nu gebeurt <span class="pill" id="pos"></span></h2>
+      <div class="mats">
+        <div><div class="mat-title">pixels onder het filter</div><div class="mat" id="mpatch"></div></div>
+        <span class="op">×</span>
+        <div><div class="mat-title">gewichten</div><div class="mat kern" id="mkern"></div></div>
+      </div>
+      <div><div class="mat-title">vakje voor vakje vermenigvuldigd</div><div class="mat prod" id="mprod"></div></div>
+      <div class="sum" id="sum"></div>
+      <div class="result">
+        <div class="swatch" id="swatch"></div>
+        <div><div class="big" id="raw"></div><div class="note" id="shown"></div></div>
+      </div>
+    </div>
+    <div class="panel canvas-box">
+      <h2>Uitvoer <span class="pill" id="outshape"></span></h2>
+      <canvas id="cout" width="400" height="300" aria-label="Uitvoerraster dat stap voor stap vol raakt"></canvas>
+      <p class="cap">Elke stap vult één vakje. Het blauwe kader is het vakje dat nu wordt uitgerekend. Klik op een vakje om te zien waar het vandaan komt.</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Hetzelfde filter op de hele foto</h2>
+    <p class="cap" style="margin-bottom:12px">De hele foto op 320 × 240 pixels, met dezelfde padding, stride, kanaal en weergave. Het gestippelde kader is het stuk uit het raster hierboven.</p>
+    <div class="photo">
+      <div class="canvas-box"><canvas id="pin" width="320" height="240" aria-label="Originele foto in het gekozen kanaal"></canvas><span class="cap">Invoer</span></div>
+      <div class="canvas-box"><canvas id="pout" width="320" height="240" aria-label="Foto na het filter"></canvas><span class="cap" id="pcap">Na het filter</span></div>
+    </div>
+    <p class="note" style="margin-top:12px">Een CNN doet precies deze som, maar leert de 9 gewichten zelf tijdens het trainen. Bij een kleurenfoto heeft één filter 3 × 3 gewichten per kanaal (27 in totaal) en worden de drie uitkomsten opgeteld; hier kijken we naar één kanaal tegelijk.</p>
+  </section>
+</main>
+
+<script>
+(function(){
+"use strict";
+const PRESETS = [
+  {id:"identity", name:"Identiteit (verandert niets)", k:[0,0,0, 0,1,0, 0,0,0], f:"1", d:"clip"},
+  {id:"box", name:"Vervagen (gemiddelde)", k:[1,1,1, 1,1,1, 1,1,1], f:"1/9", d:"clip"},
+  {id:"gauss", name:"Vervagen (Gauss)", k:[1,2,1, 2,4,2, 1,2,1], f:"1/16", d:"clip"},
+  {id:"sharpen", name:"Verscherpen", k:[0,-1,0, -1,5,-1, 0,-1,0], f:"1", d:"clip"},
+  {id:"edges", name:"Randen (alle richtingen)", k:[-1,-1,-1, -1,8,-1, -1,-1,-1], f:"1", d:"abs"},
+  {id:"sobelx", name:"Verticale randen (Sobel x)", k:[-1,0,1, -2,0,2, -1,0,1], f:"1", d:"abs"},
+  {id:"sobely", name:"Horizontale randen (Sobel y)", k:[-1,-2,-1, 0,0,0, 1,2,1], f:"1", d:"abs"},
+  {id:"emboss", name:"Reliëf", k:[-2,-1,0, -1,1,1, 0,1,2], f:"1", d:"clip"},
+  {id:"custom", name:"Eigen filter", k:null, f:null, d:null}
+];
+const $ = id => document.getElementById(id);
+const els = {preset:$("preset"),kernel:$("kernel"),factor:$("factor"),padding:$("padding"),stride:$("stride"),grid:$("grid"),channel:$("channel"),display:$("display"),
+  back:$("back"),step:$("step"),play:$("play"),all:$("all"),reset:$("reset"),speed:$("speed"),speedval:$("speedval"),facts:$("facts"),
+  cin:$("cin"),cout:$("cout"),pin:$("pin"),pout:$("pout"),mpatch:$("mpatch"),mkern:$("mkern"),mprod:$("mprod"),sum:$("sum"),raw:$("raw"),shown:$("shown"),swatch:$("swatch"),
+  pos:$("pos"),crop:$("crop"),thumb:$("thumb"),inshape:$("inshape"),outshape:$("outshape"),pcap:$("pcap")};
+
+PRESETS.forEach(p=>{const o=document.createElement("option");o.value=p.id;o.textContent=p.name;els.preset.appendChild(o);});
+const kInputs=[];
+for(let i=0;i<9;i++){const inp=document.createElement("input");inp.type="text";inp.inputMode="decimal";inp.id="k"+i;inp.setAttribute("aria-label","gewicht rij "+(Math.floor(i/3)+1)+" kolom "+(i%3+1));els.kernel.appendChild(inp);kInputs.push(inp);}
+
+const CROPS={full:{x:0,y:0,w:1},slice:{x:0.44,y:0.37,w:0.5},clasp:{x:0.02,y:0.22,w:0.3},lattice:{x:0.2,y:0.06,w:0.3}};
+const S={crop:{x:0.44,y:0.37,w:0.5},img:null,W:24,H:18,p:1,s:1,gray:null,K:[0,0,0,0,1,0,0,0,0],f:1,out:null,OW:0,OH:0,step:0,playing:false,timer:null,mode:"clip",lo:0,hi:255};
+
+function parseNum(str){
+  str=String(str).trim().replace(",",".");
+  if(str==="") return NaN;
+  const m=str.match(/^(-?\d*\.?\d+)\s*\/\s*(-?\d*\.?\d+)$/);
+  if(m){const a=parseFloat(m[1]),b=parseFloat(m[2]);return b===0?NaN:a/b;}
+  const v=Number(str); return isFinite(v)?v:NaN;
+}
+function fmt(v,dec){if(!isFinite(v))return "–";const r=Math.round(v*100)/100;return (dec===0?Math.round(v):r).toString().replace("-","−");}
+
+function setPreset(id){
+  const p=PRESETS.find(x=>x.id===id); if(!p||!p.k) return;
+  p.k.forEach((v,i)=>{kInputs[i].value=v;}); els.factor.value=p.f; els.display.value=p.d;
+}
+function readKernel(){
+  const K=kInputs.map(i=>parseNum(i.value)); let ok=true;
+  kInputs.forEach((inp,i)=>{const bad=!isFinite(K[i]);inp.style.borderColor=bad?"var(--accent)":"";if(bad)ok=false;});
+  const f=parseNum(els.factor.value); els.factor.style.borderColor=isFinite(f)?"":"var(--accent)";
+  if(ok&&isFinite(f)){S.K=K;S.f=f;}
+}
+
+function channelValues(ctx,w,h){
+  const d=ctx.getImageData(0,0,w,h).data, ch=els.channel.value, a=new Float32Array(w*h);
+  for(let i=0;i<w*h;i++){const r=d[i*4],g=d[i*4+1],b=d[i*4+2];
+    a[i]=Math.round(ch==="r"?r:ch==="g"?g:ch==="b"?b:0.299*r+0.587*g+0.114*b);}
+  return a;
+}
+function sample(w,h,crop){
+  const c=document.createElement("canvas");c.width=w;c.height=h;const x=c.getContext("2d",{willReadFrequently:true});
+  x.imageSmoothingEnabled=true;x.imageSmoothingQuality="high";
+  const IW=S.img.naturalWidth, IH=S.img.naturalHeight, r=crop||{x:0,y:0,w:1};
+  x.drawImage(S.img,r.x*IW,r.y*IH,r.w*IW,r.w*IH,0,0,w,h);return channelValues(x,w,h);
+}
+function convolve(src,W,H,K,f,p,s){
+  const OW=Math.floor((W+2*p-3)/s)+1, OH=Math.floor((H+2*p-3)/s)+1, out=new Float32Array(Math.max(OW,0)*Math.max(OH,0));
+  for(let oy=0;oy<OH;oy++)for(let ox=0;ox<OW;ox++){
+    let acc=0;
+    for(let ky=0;ky<3;ky++)for(let kx=0;kx<3;kx++){
+      const y=oy*s+ky-p, x=ox*s+kx-p;
+      const v=(x<0||y<0||x>=W||y>=H)?0:src[y*W+x];
+      acc+=v*K[ky*3+kx];
+    }
+    out[oy*OW+ox]=acc*f;
+  }
+  return {out,OW,OH};
+}
+function mapper(arr,mode){
+  let lo=Infinity,hi=-Infinity;
+  if(mode==="norm"){for(const v of arr){if(v<lo)lo=v;if(v>hi)hi=v;} if(hi===lo){hi=lo+1;}}
+  return v=>{let t; if(mode==="abs")t=Math.abs(v); else if(mode==="norm")t=(v-lo)/(hi-lo)*255; else t=v; return Math.max(0,Math.min(255,t));};
+}
+
+function recompute(keepStep){
+  S.W=+els.grid.value; S.H=Math.round(S.W*0.75); S.p=+els.padding.value; S.s=+els.stride.value; S.mode=els.display.value;
+  readKernel();
+  S.gray=sample(S.W,S.H,S.crop); drawThumb();
+  const r=convolve(S.gray,S.W,S.H,S.K,S.f,S.p,S.s); S.out=r.out;S.OW=r.OW;S.OH=r.OH;
+  S.map=mapper(S.out,S.mode);
+  if(!keepStep) S.step=0; S.step=Math.min(S.step,S.OW*S.OH-1);
+  facts(); draw(); photo();
+}
+function facts(){
+  const PW=S.W+2*S.p, PH=S.H+2*S.p;
+  els.inshape.textContent=S.W+" × "+S.H;
+  els.outshape.textContent=S.OW+" × "+S.OH;
+  els.facts.innerHTML="<span>invoer <b>"+S.W+" × "+S.H+"</b></span><span>+ padding "+S.p+" → <b>"+PW+" × "+PH+"</b></span>"+
+    "<span>uitvoer = ("+S.W+" + 2·"+S.p+" − 3) / "+S.s+" + 1 = <b>"+S.OW+"</b> breed, <b>"+S.OH+"</b> hoog</span><span>stappen: <b>"+(S.OW*S.OH)+"</b></span>";
+}
+
+// ---------- tekenen
+function cssVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+function setupCanvas(c,cols,rows,maxW){
+  const cs=Math.max(6,Math.floor(Math.min(maxW/cols, 34)));
+  const dpr=window.devicePixelRatio||1;
+  c.width=cols*cs*dpr; c.height=rows*cs*dpr; c.style.maxWidth=(cols*cs)+"px";
+  const x=c.getContext("2d"); x.setTransform(dpr,0,0,dpr,0,0); return {x,cs};
+}
+function hatch(x,px,py,cs,col){
+  x.save();x.beginPath();x.rect(px,py,cs,cs);x.clip();x.strokeStyle=col;x.lineWidth=1;
+  for(let t=-cs;t<cs*2;t+=5){x.beginPath();x.moveTo(px+t,py+cs);x.lineTo(px+t+cs,py);x.stroke();}
+  x.restore();
+}
+function draw(){
+  if(!S.gray||!S.out)return;
+  const PW=S.W+2*S.p, PH=S.H+2*S.p;
+  const boxW=els.cin.parentElement.clientWidth-32;
+  const {x,cs}=setupCanvas(els.cin,PW,PH,Math.max(220,boxW));
+  const padBg=cssVar("--pad"), line=cssVar("--line"), acc=cssVar("--accent"), outc=cssVar("--out"), muted=cssVar("--muted");
+  const showNums=cs>=24;
+  for(let y=0;y<PH;y++)for(let xx=0;xx<PW;xx++){
+    const ix=xx-S.p, iy=y-S.p, px=xx*cs, py=y*cs;
+    if(ix<0||iy<0||ix>=S.W||iy>=S.H){x.fillStyle=padBg;x.fillRect(px,py,cs,cs);hatch(x,px,py,cs,line);
+      if(showNums){x.fillStyle=muted;x.font=Math.floor(cs*0.38)+"px IBM Plex Mono, monospace";x.textAlign="center";x.textBaseline="middle";x.fillText("0",px+cs/2,py+cs/2);} }
+    else{const v=S.gray[iy*S.W+ix];x.fillStyle="rgb("+v+","+v+","+v+")";x.fillRect(px,py,cs,cs);
+      if(showNums){x.fillStyle=v>130?"#111":"#fff";x.font=Math.floor(cs*0.34)+"px IBM Plex Mono, monospace";x.textAlign="center";x.textBaseline="middle";x.fillText(String(v),px+cs/2,py+cs/2);} }
+  }
+  if(cs>=10){x.strokeStyle="rgba(127,127,127,.25)";x.lineWidth=1;for(let i=0;i<=PW;i++){x.beginPath();x.moveTo(i*cs+.5,0);x.lineTo(i*cs+.5,PH*cs);x.stroke();}for(let j=0;j<=PH;j++){x.beginPath();x.moveTo(0,j*cs+.5);x.lineTo(PW*cs,j*cs+.5);x.stroke();}}
+  // rand van de echte foto
+  x.strokeStyle=outc;x.setLineDash([4,3]);x.lineWidth=1.5;x.strokeRect(S.p*cs+.75,S.p*cs+.75,S.W*cs-1.5,S.H*cs-1.5);x.setLineDash([]);
+  const ox=S.step%S.OW, oy=Math.floor(S.step/S.OW);
+  if(S.OW>0){x.fillStyle="rgba(229,72,45,.18)";x.fillRect(ox*S.s*cs,oy*S.s*cs,3*cs,3*cs);x.strokeStyle=acc;x.lineWidth=3;x.strokeRect(ox*S.s*cs+1.5,oy*S.s*cs+1.5,3*cs-3,3*cs-3);}
+  // uitvoer
+  const ob=setupCanvas(els.cout,S.OW,S.OH,Math.max(220,boxW)); const y2=ob.x, c2=ob.cs;
+  for(let j=0;j<S.OH;j++)for(let i=0;i<S.OW;i++){
+    const k=j*S.OW+i, px=i*c2, py=j*c2;
+    if(k<=S.step){const v=Math.round(S.map(S.out[k]));y2.fillStyle="rgb("+v+","+v+","+v+")";y2.fillRect(px,py,c2,c2);
+      if(c2>=24){y2.fillStyle=v>130?"#111":"#fff";y2.font=Math.floor(c2*0.3)+"px IBM Plex Mono, monospace";y2.textAlign="center";y2.textBaseline="middle";y2.fillText(fmt(S.out[k],0),px+c2/2,py+c2/2);} }
+    else{y2.fillStyle=padBg;y2.fillRect(px,py,c2,c2);}
+  }
+  if(c2>=10){y2.strokeStyle="rgba(127,127,127,.25)";y2.lineWidth=1;for(let i=0;i<=S.OW;i++){y2.beginPath();y2.moveTo(i*c2+.5,0);y2.lineTo(i*c2+.5,S.OH*c2);y2.stroke();}for(let j=0;j<=S.OH;j++){y2.beginPath();y2.moveTo(0,j*c2+.5);y2.lineTo(S.OW*c2,j*c2+.5);y2.stroke();}}
+  if(S.OW>0){y2.strokeStyle=outc;y2.lineWidth=3;y2.strokeRect(ox*c2+1.5,oy*c2+1.5,c2-3,c2-3);}
+  S.csIn=cs;S.csOut=c2;
+  calc(ox,oy);
+}
+function cellDiv(text,cls){const d=document.createElement("div");d.textContent=text;if(cls)d.className=cls;return d;}
+function calc(ox,oy){
+  els.mpatch.innerHTML="";els.mkern.innerHTML="";els.mprod.innerHTML="";
+  if(S.OW<=0){els.sum.textContent="Het filter past niet op de invoer.";return;}
+  const terms=[];let acc=0;
+  for(let ky=0;ky<3;ky++)for(let kx=0;kx<3;kx++){
+    const y=oy*S.s+ky-S.p, x=ox*S.s+kx-S.p, isPad=(x<0||y<0||x>=S.W||y>=S.H), v=isPad?0:S.gray[y*S.W+x], w=S.K[ky*3+kx];
+    els.mpatch.appendChild(cellDiv(String(v),isPad?"padcell":""));
+    els.mkern.appendChild(cellDiv(fmt(w)));
+    els.mprod.appendChild(cellDiv(fmt(v*w)));
+    acc+=v*w; terms.push(v+"·"+(w<0?"("+fmt(w)+")":fmt(w)));
+  }
+  const raw=acc*S.f, shown=Math.round(S.map(raw));
+  const ind="<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ ";
+  els.sum.innerHTML="som = "+terms.slice(0,3).join(" + ")+ind+terms.slice(3,6).join(" + ")+ind+terms.slice(6).join(" + ")+"<br>= "+fmt(acc)+(S.f!==1?"&nbsp;&nbsp;× factor "+els.factor.value+" = "+fmt(raw):"");
+  els.raw.textContent="uitkomst: "+fmt(raw);
+  const how={clip:"afgekapt op 0–255",abs:"absolute waarde, afgekapt",norm:"geschaald over de hele uitvoer"}[S.mode];
+  els.shown.textContent="getoond als grijswaarde "+shown+" ("+how+")";
+  els.swatch.style.background="rgb("+shown+","+shown+","+shown+")";
+  els.pos.textContent="stap "+(S.step+1)+" van "+(S.OW*S.OH)+" · uitvoer ("+ox+", "+oy+")";
+}
+function photo(){
+  const w=320,h=240; const src=sample(w,h);
+  const xi=els.pin.getContext("2d"), xo=els.pout.getContext("2d");
+  const im=xi.createImageData(w,h); for(let i=0;i<w*h;i++){const v=src[i];im.data[i*4]=v;im.data[i*4+1]=v;im.data[i*4+2]=v;im.data[i*4+3]=255;} xi.putImageData(im,0,0);
+  if(S.crop.w<1){xi.save();xi.strokeStyle=cssVar("--accent");xi.lineWidth=2;xi.setLineDash([5,4]);xi.strokeRect(S.crop.x*w,S.crop.y*h,S.crop.w*w,S.crop.w*h);xi.restore();}
+  const r=convolve(src,w,h,S.K,S.f,S.p,S.s), m=mapper(r.out,S.mode);
+  els.pout.width=r.OW; els.pout.height=r.OH;
+  const om=xo.createImageData(r.OW,r.OH); for(let i=0;i<r.OW*r.OH;i++){const v=Math.round(m(r.out[i]));om.data[i*4]=v;om.data[i*4+1]=v;om.data[i*4+2]=v;om.data[i*4+3]=255;} xo.putImageData(om,0,0);
+  els.pcap.textContent="Na het filter ("+r.OW+" × "+r.OH+")";
+}
+
+// ---------- uitsnede
+function drawThumb(){
+  if(!S.img) return;
+  const c=els.thumb, x=c.getContext("2d"), W=c.width, H=c.height, r=S.crop;
+  x.drawImage(S.img,0,0,W,H);
+  x.fillStyle="rgba(10,14,25,.55)";
+  x.beginPath();x.rect(0,0,W,H);x.rect(r.x*W,r.y*H,r.w*W,r.w*H);x.fill("evenodd");
+  x.strokeStyle=cssVar("--accent");x.lineWidth=3;x.strokeRect(r.x*W,r.y*H,r.w*W,r.w*H);
+}
+function clampCrop(r){r.w=Math.max(0.06,Math.min(1,r.w));r.x=Math.max(0,Math.min(1-r.w,r.x));r.y=Math.max(0,Math.min(1-r.w,r.y));return r;}
+let drag=null;
+function norm(e){const b=els.thumb.getBoundingClientRect();return {u:(e.clientX-b.left)/b.width,v:(e.clientY-b.top)/b.height};}
+els.thumb.addEventListener("pointerdown",e=>{
+  const {u,v}=norm(e), r=S.crop; els.thumb.setPointerCapture(e.pointerId); stop();
+  if(r.w<1&&u>=r.x&&u<=r.x+r.w&&v>=r.y&&v<=r.y+r.w) drag={mode:"move",du:u-r.x,dv:v-r.y};
+  else drag={mode:"draw",u0:u,v0:v};
+});
+els.thumb.addEventListener("pointermove",e=>{
+  if(!drag) return; const {u,v}=norm(e);
+  if(drag.mode==="move"){S.crop=clampCrop({x:u-drag.du,y:v-drag.dv,w:S.crop.w});}
+  else{const s=Math.max(Math.abs(u-drag.u0),Math.abs(v-drag.v0));
+    S.crop=clampCrop({x:u<drag.u0?drag.u0-s:drag.u0,y:v<drag.v0?drag.v0-s:drag.v0,w:s});}
+  els.crop.value="own"; drawThumb();
+});
+els.thumb.addEventListener("pointerup",()=>{if(!drag)return; drag=null; recompute(true);});
+els.crop.addEventListener("change",()=>{const c=CROPS[els.crop.value]; if(c){S.crop={...c};} stop(); recompute(false); S.step=Math.floor(S.OH/2)*S.OW+Math.floor(S.OW/2); draw();});
+
+// ---------- bediening
+function go(n){S.step=Math.max(0,Math.min(S.OW*S.OH-1,n));draw();}
+function stop(){S.playing=false;clearInterval(S.timer);els.play.textContent="Afspelen";}
+function play(){
+  if(S.playing){stop();return;}
+  if(S.step>=S.OW*S.OH-1) S.step=0;
+  S.playing=true;els.play.textContent="Pauze";
+  S.timer=setInterval(()=>{if(S.step>=S.OW*S.OH-1){stop();return;}go(S.step+1);},1000/(+els.speed.value));
+}
+els.step.addEventListener("click",()=>{stop();go(S.step+1);});
+els.back.addEventListener("click",()=>{stop();go(S.step-1);});
+els.all.addEventListener("click",()=>{stop();go(S.OW*S.OH-1);});
+els.reset.addEventListener("click",()=>{stop();go(0);});
+els.play.addEventListener("click",play);
+els.speed.addEventListener("input",()=>{els.speedval.textContent=els.speed.value+" / s";if(S.playing){stop();play();}});
+els.preset.addEventListener("change",()=>{setPreset(els.preset.value);recompute(true);});
+kInputs.forEach(i=>i.addEventListener("input",()=>{els.preset.value="custom";recompute(true);}));
+els.factor.addEventListener("input",()=>{els.preset.value="custom";recompute(true);});
+["padding","stride","grid","channel"].forEach(k=>els[k].addEventListener("change",()=>{stop();recompute(false);}));
+els.display.addEventListener("change",()=>recompute(true));
+els.cin.addEventListener("click",e=>{
+  const r=els.cin.getBoundingClientRect(), sc=(S.W+2*S.p)*S.csIn/r.width;
+  const px=Math.floor((e.clientX-r.left)*sc/S.csIn), py=Math.floor((e.clientY-r.top)*sc/S.csIn);
+  // plaats het venster zo dat de aangeklikte pixel in het midden staat
+  let ox=Math.round((px-1)/S.s), oy=Math.round((py-1)/S.s);
+  ox=Math.max(0,Math.min(S.OW-1,ox)); oy=Math.max(0,Math.min(S.OH-1,oy)); stop(); go(oy*S.OW+ox);
+});
+els.cout.addEventListener("click",e=>{
+  const r=els.cout.getBoundingClientRect(), sc=S.OW*S.csOut/r.width;
+  const ox=Math.floor((e.clientX-r.left)*sc/S.csOut), oy=Math.floor((e.clientY-r.top)*sc/S.csOut);
+  if(ox>=0&&oy>=0&&ox<S.OW&&oy<S.OH){stop();go(oy*S.OW+ox);}
+});
+document.addEventListener("keydown",e=>{
+  if(e.target.tagName==="INPUT"||e.target.tagName==="SELECT")return;
+  if(e.key==="ArrowRight"){stop();go(S.step+1);e.preventDefault();}
+  if(e.key==="ArrowLeft"){stop();go(S.step-1);e.preventDefault();}
+  if(e.key===" "){play();e.preventDefault();}
+});
+let rt;window.addEventListener("resize",()=>{clearTimeout(rt);rt=setTimeout(draw,120);});
+try{window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",draw);}catch(_){}
+new MutationObserver(draw).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+
+els.preset.value="edges"; setPreset("edges");
+const img=new Image();
+img.onload=()=>{S.img=img;recompute(false);S.step=Math.floor(S.OH/2)*S.OW+Math.floor(S.OW/2);draw();};
+img.onerror=()=>{els.sum.textContent="De foto kon niet worden geladen.";};
+img.src="./taart.jpg";
+})();
+</script>
+</body>
+</html>
